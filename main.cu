@@ -219,7 +219,7 @@ __global__ void alignKernel(char * x, char * y, kData* data, result * results){
 	return;
 }
 
-__global__ void cdprun(int const iSize,int iDepth, char * x, char * y, kData* data, result * results) {
+__global__ void cdprun(int const iSize,int iDepth, char * x, char * y, kData* data, result * results, int nrun) {
 
 //   int tid = threadIdx.x；
 
@@ -228,7 +228,7 @@ __global__ void cdprun(int const iSize,int iDepth, char * x, char * y, kData* da
 //       kData* host_data = (kData*) malloc(sizeof(kData) * nWindows);
         kData* device_data = data;
          result * device_results = results;
-
+        int ncdpb = nrun;
 
 
    // printf("Recursion=%d: Hello World from thread %d block %d\n",iDepth,threadIdx.x,blockIdx.x);
@@ -239,7 +239,7 @@ __global__ void cdprun(int const iSize,int iDepth, char * x, char * y, kData* da
     // thread 0 launches child grid recursively
     if(threadIdx.x == 0 && nthreads > 0) {
         //nestedHelloWorld<<<1, nthreads>>>(nthreads,++iDepth);
-        alignKernel<<<1, nthreads>>>(c_x, c_y, device_data, device_results);
+        alignKernel<<<ncdpb, 1>>>(c_x, c_y, device_data, device_results);
        // printf("-------> nested execution depth: %d\n",iDepth);
     }
 }
@@ -358,15 +358,19 @@ int main(int argc, char * argv[]){
 	HANDLE_ERROR(cudaMemcpy(device_results, host_results, sizeof(result) * nWindows, cudaMemcpyHostToDevice));
 
 
-	int NITER = 10;
-	int blocksize = 8;
-	 dim3 block (blocksize, 1);
-	//start_timer();
-	for(int i = 0; i < NITER; i++){
-	//	alignKernel<<<nWindows, 1>>>(x, y, device_data, device_results);		
-		cdprun<<<nWindows, 1>>>(block.x, 0, x, y, device_data, device_results);
-		HANDLE_ERROR(cudaDeviceSynchronize());
-	}
+	  int NITER = 10;
+        int blocksize = 8;
+            int size = 8;
+
+        dim3 block (blocksize, 1);
+        dim3 grid  ((size + block.x - 1) / block.x, 1);
+
+        //start_timer();
+        for(int i = 0; i < NITER; i++){
+        //      alignKernel<<<nWindows, 1>>>(x, y, device_data, device_results);                
+                cdprun<<<grid, block>>>(block.x, 0, x, y, device_data, device_results, nWindows);
+                HANDLE_ERROR(cudaDeviceSynchronize());
+        }
 	
       //	fprintf(stderr, "Average kernel time for %d iterations: %lf\n", NITER, NITER/cpu_seconds());
 
